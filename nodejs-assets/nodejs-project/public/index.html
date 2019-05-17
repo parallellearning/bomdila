@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Dashboard</title>
+    <!-- <script src="https://unpkg.com/react@16/umd/react.development.js"></script> -->
+    <!-- <script src="https://unpkg.com/react-dom@16/umd/react-dom.production.min.js"></script> -->
+
+    <!-- Don't use this in production: -->
+    <script src="vendor/react.production.min.js" charset="utf-8"></script>
+    <script src="vendor/react-dom.production.min.js" charset="utf-8"></script>
+    <script src="vendor/babel.min.js" charset="utf-8"></script>
+    <script src="vendor/date-fns.min.js"></script>
+    <link rel="stylesheet" href="vendor/bootstrap.min.css" />
+  </head>
+
+  <body>
+    <div id="root"></div>
+    <script type="text/javascript">
+      var ID = function() {
+        return (
+          '_' +
+          Math.random()
+            .toString(36)
+            .substr(2, 9)
+        );
+      };
+    </script>
+    <script type="text/babel">
+      // main app
+      function App() {
+        const [selectedDate, setSelectedDate] = React.useState(
+          dateFns.format(new Date(), 'YYYY-MM-DD')
+        );
+
+        return (
+          <div>
+            <nav className="navbar navbar-light bg-light">
+              <form className="form-inline">
+                <input
+                  id="select-date"
+                  className="form-control"
+                  type="date"
+                  value={selectedDate}
+                  onChange={e => setSelectedDate(e.target.value)}
+                />
+              </form>
+            </nav>
+            <DayDisplay selectedDate={selectedDate} />
+          </div>
+        );
+      }
+      // slots
+      function DayDisplay({ selectedDate }) {
+        const [hash, setHash] = React.useState('#plan');
+        React.useEffect(() => {
+          function onhashchange() {
+            setHash(window.location.hash);
+          }
+          window.onhashchange = onhashchange;
+          setHash(window.location.hash);
+          return () => {};
+        }, []);
+
+        return (
+          <div style={{ padding: 16 }}>
+            <ul className="nav nav-pills">
+              <li className="nav-item">
+                <a
+                  className={`nav-link ${hash === '#plan' ? 'active' : ''}`}
+                  href="#plan"
+                >
+                  Plan
+                </a>
+              </li>
+              <li className="nav-item">
+                <a
+                  className={`nav-link ${hash === '#data' ? 'active' : ''}`}
+                  href="#data"
+                >
+                  Data
+                </a>
+              </li>
+            </ul>
+            <br />
+            {hash === '#plan' && <SlotsForTheDay selectedDate={selectedDate} />}
+            {hash === '#data' && (
+              <SlotsWithDataForTheDay selectedDate={selectedDate} />
+            )}
+          </div>
+        );
+      }
+      // slots for the day
+      function SlotsForTheDay({ selectedDate }) {
+        const [plan, setPlan] = React.useState(null);
+        React.useEffect(() => {
+          fetch(`/schedule/${dateFns.format(selectedDate, 'YYYY-MM-DD')}`)
+            .then(res => res.json())
+            .then(json => {
+              setPlan(json.data);
+            });
+          return () => {};
+        }, [selectedDate]);
+        if (!plan) {
+          return null;
+        }
+        console.log(plan);
+        return (
+          <div>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th scope="col">#</th>
+                  <th scope="col">Start Time</th>
+                  <th scope="col">End Time</th>
+                  <th scope="col">Target</th>
+                </tr>
+              </thead>
+              <tbody>
+                {plan.slots.map((slot, i) => {
+                  return (
+                    <tr key={slot.id}>
+                      <th scope="row">{i + 1}</th>
+                      <td>
+                        <input
+                          className="form-control"
+                          type="time"
+                          value={dateFns.format(slot.startTime, 'HH:mm')}
+                          onChange={e => {
+                            const [hours, mins] = e.target.value.split(':');
+                            if (!hours || !mins) {
+                              return;
+                            }
+                            setPlan({
+                              ...plan,
+
+                              slots: plan.slots.map(item => {
+                                if (item.id === slot.id) {
+                                  return {
+                                    ...item,
+                                    startTime: dateFns.setMinutes(
+                                      dateFns.setHours(slot.startTime, hours),
+                                      mins
+                                    )
+                                  };
+                                }
+                                return item;
+                              })
+                            });
+                          }}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          className="form-control"
+                          type="time"
+                          value={dateFns.format(slot.endTime, 'HH:mm')}
+                          onChange={e => {
+                            const [hours, mins] = e.target.value.split(':');
+                            if (!hours || !mins) {
+                              return;
+                            }
+                            setPlan({
+                              ...plan,
+
+                              slots: plan.slots.map(item => {
+                                if (item.id === slot.id) {
+                                  return {
+                                    ...item,
+                                    endTime: dateFns.setMinutes(
+                                      dateFns.setHours(slot.endTime, hours),
+                                      mins
+                                    )
+                                  };
+                                }
+                                return item;
+                              })
+                            });
+                          }}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          className="form-control"
+                          type="number"
+                          value={slot.target}
+                          onChange={e => {
+                            setPlan({
+                              ...plan,
+
+                              slots: plan.slots.map(item => {
+                                if (item.id === slot.id) {
+                                  return {
+                                    ...item,
+                                    target: e.target.value
+                                  };
+                                }
+                                return item;
+                              })
+                            });
+                          }}
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <button
+              style={{ marginRight: 20 }}
+              type="button"
+              className="btn btn-primary"
+              onClick={() => {
+                const lastSlot = plan.slots[plan.slots.length - 1];
+                setPlan({
+                  ...plan,
+                  slots: [
+                    ...plan.slots,
+                    {
+                      id: ID(),
+                      startTime: dateFns.addSeconds(lastSlot.endTime, 1),
+                      endTime: dateFns.addHours(lastSlot.endTime, 1),
+                      target: 20,
+                      scans: [],
+                      lossTime: '',
+                      lossReason: ''
+                    }
+                  ]
+                });
+              }}
+            >
+              Add Row
+            </button>
+
+            <button
+              type="button"
+              className="btn btn-success"
+              onClick={() => {
+                fetch(
+                  `/schedule/slots/${dateFns.format(
+                    selectedDate,
+                    'YYYY-MM-DD'
+                  )}`,
+                  {
+                    method: 'POST',
+                    headers: {
+                      Accept: 'application/json',
+                      'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ slots: plan.slots })
+                  }
+                )
+                  .then(res => res.json())
+                  .then(data => {
+                    alert('Saved successfully!');
+                  });
+              }}
+            >
+              Save
+            </button>
+          </div>
+        );
+      }
+      // slots for the day with data
+      function SlotsWithDataForTheDay({ selectedDate }) {
+        const [plan, setPlan] = React.useState(null);
+        React.useEffect(() => {
+          fetch(`/schedule/${dateFns.format(selectedDate, 'YYYY-MM-DD')}`)
+            .then(res => res.json())
+            .then(json => {
+              setPlan(json.data);
+            });
+          return () => {};
+        }, [selectedDate]);
+
+        React.useEffect(() => {
+          let interval = setInterval(() => {
+            fetch(`/schedule/${dateFns.format(selectedDate, 'YYYY-MM-DD')}`)
+              .then(res => res.json())
+              .then(json => {
+                setPlan(json.data);
+              });
+          }, 1000);
+          return () => {
+            clearInterval(interval);
+          };
+        }, []);
+
+        if (!plan) {
+          return null;
+        }
+        console.log(plan);
+
+        return (
+          <div>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th scope="col">#</th>
+                  <th scope="col">Time Interval</th>
+                  <th scope="col">Target</th>
+                  <th scope="col">Actual Quantity</th>
+                  <th scope="col">Loss time</th>
+                  <th scope="col">Loss reason</th>
+                </tr>
+              </thead>
+              <tbody>
+                {plan.slots.map((slot, i) => {
+                  return (
+                    <tr key={slot.id}>
+                      <th scope="row">{i + 1}</th>
+                      <td>
+                        {dateFns.format(slot.startTime, 'HH:mm')}
+                        &nbsp;&nbsp;-&nbsp;&nbsp;
+                        {dateFns.format(slot.endTime, 'HH:mm')}
+                      </td>
+                      <td>{slot.target}</td>
+                      <td>{slot.scans ? slot.scans.length : 0}</td>
+                      <td>'-'</td>
+                      <td>'-'</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        );
+      }
+      ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+  </body>
+</html>
